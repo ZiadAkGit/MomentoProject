@@ -23,7 +23,7 @@ import "./App.css";
 const AUTH_ERROR_MESSAGES = {
 	"auth/email-already-in-use": "האימייל כבר קיים במערכת.",
 	"auth/invalid-email": "כתובת האימייל לא תקינה.",
-	"auth/weak-password": "הסיסמה חלשה מדי. השתמשו בלפחות 6 תווים.",
+	"auth/weak-password": "הסיסמה חלשה מדי. השתמשו בלפחות 6 תוים.",
 	"auth/invalid-credential": "אימייל או סיסמה שגויים.",
 	"auth/too-many-requests": "בוצעו יותר מדי ניסיונות. נסו שוב בעוד כמה דקות.",
 	"auth/network-request-failed": "בעיית רשת. בדקו חיבור אינטרנט ונסו שוב.",
