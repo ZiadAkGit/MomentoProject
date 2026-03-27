@@ -58,6 +58,10 @@ h1 {
 	cursor: pointer;
 }
 
+.tab:hover {
+	border-color: #2c4a37;
+}
+
 .tab.active {
 	border-color: #1d5f3f;
 	background: #dff0e6;
