@@ -1,0 +1,19 @@
+:root {
+  font-family: 'Heebo', 'Assistant', 'Segoe UI', sans-serif;
+  color: #1f3026;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(165, 219, 182, 0.45), transparent 40%),
+    radial-gradient(circle at 86% 84%, rgba(141, 199, 162, 0.45), transparent 45%),
+    linear-gradient(140deg, #f4f8f4 0%, #eaf4ec 100%);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
