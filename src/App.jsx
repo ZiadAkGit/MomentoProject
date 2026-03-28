@@ -20,6 +20,11 @@ import {
 } from "firebase/firestore";
 import { auth, db, firebaseSetupError } from "./firebase";
 import "./App.css";
+import DashboardNav from "./components/DashboardNav";
+import AuthPage from "./pages/AuthPage";
+import MasterDashboard from "./pages/MasterDashboard";
+import EventAdminDashboard from "./pages/EventAdminDashboard";
+import EventUserDashboard from "./pages/EventUserDashboard";
 
 const AUTH_ERROR_MESSAGES = {
 	"auth/email-already-in-use": "האימייל כבר קיים במערכת.",
@@ -924,11 +929,6 @@ function App() {
 		const isAdmin = userRole === ROLE_MASTER_ADMIN || userRole === ROLE_EVENT_ADMIN;
 		const eventAdmins = managedUsers.filter((item) => item.role === ROLE_EVENT_ADMIN);
 		const eventUsers = managedUsers.filter((item) => item.role === ROLE_EVENT_USER);
-		const prefsByEvent = eventAdminPreferences.reduce((acc, item) => {
-			const key = item.eventName || "ללא שם אירוע";
-			acc[key] = (acc[key] || 0) + 1;
-			return acc;
-		}, {});
 		const dashboardLinks =
 			userRole === ROLE_MASTER_ADMIN
 				? [
@@ -962,347 +962,72 @@ function App() {
 							: "התחברת כמשתמש רגיל ללא הרשאות מנהל."}
 					</p>
 
-					<nav className="dashboard-nav" aria-label="Dashboard sections">
-						{dashboardLinks.map((item) => (
-							<a key={item.id} className="nav-chip" href={`#${item.id}`}>
-								{item.label}
-							</a>
-						))}
-					</nav>
+					<DashboardNav links={dashboardLinks} />
 
 					{userRole === ROLE_MASTER_ADMIN && (
-						<>
-							<div id="master-events" className="users-list">
-								<h3>יצירת אירוע ושיוך ל-Event Admin</h3>
-								<form className="promote-form" onSubmit={handleSaveEvent}>
-									<input
-										type="text"
-										placeholder="שם האירוע"
-										value={eventName}
-										onChange={(event) => setEventName(event.target.value)}
-										required
-									/>
-									<input
-										type="date"
-										value={eventDate}
-										onChange={(event) => setEventDate(event.target.value)}
-										required
-									/>
-									<input
-										type="text"
-										placeholder="מיקום האירוע (אופציונלי)"
-										value={eventLocation}
-										onChange={(event) => setEventLocation(event.target.value)}
-									/>
-									<input
-										type="text"
-										placeholder="תיאור קצר (אופציונלי)"
-										value={eventDescription}
-										onChange={(event) => setEventDescription(event.target.value)}
-									/>
-									<select
-										value={selectedEventOwnerAdminId}
-										onChange={(event) => setSelectedEventOwnerAdminId(event.target.value)}
-										required
-									>
-										<option value="">בחרו Event Admin לאירוע</option>
-										{eventAdmins.map((item) => (
-											<option key={item.id} value={item.id}>
-												{item.fullName || item.email}
-											</option>
-										))}
-									</select>
-									<button type="submit" className="submit-button" disabled={isLoading}>
-										{isLoading ? "שומר..." : "צור אירוע"}
-									</button>
-								</form>
-								{masterEvents.length === 0 && <p>עדיין לא יצרת אירועים.</p>}
-								{masterEvents.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.name}</strong>
-											<div className="row-meta">
-												{item.eventDate}
-												{item.location ? ` | ${item.location}` : ""}
-												{item.assignedEventAdminEmail
-													? ` | Event Admin: ${item.assignedEventAdminEmail}`
-													: ""}
-											</div>
-										</div>
-									</div>
-								))}
-							</div>
-
-							<form
-								id="master-admins"
-								className="promote-form"
-								onSubmit={handlePromoteToEventAdmin}
-							>
-								<label htmlFor="promoteEmail">מינוי Event Admin (לפי אימייל)</label>
-								<input
-									id="promoteEmail"
-									type="email"
-									placeholder="event-admin@example.com"
-									value={promoteEmail}
-									onChange={(event) => setPromoteEmail(event.target.value)}
-									required
-								/>
-								<button type="submit" className="submit-button" disabled={isLoading}>
-									{isLoading ? "מעדכן..." : "מנה ל-Event Admin"}
-								</button>
-							</form>
-
-							<form
-								id="master-assign"
-								className="promote-form"
-								onSubmit={handleAssignEventUser}
-							>
-								<label htmlFor="eventAdminSelect">שיוך Event User ל-Event Admin</label>
-								<select
-									id="eventAdminSelect"
-									value={selectedEventAdminId}
-									onChange={(event) => setSelectedEventAdminId(event.target.value)}
-									required
-								>
-									<option value="">בחרו Event Admin</option>
-									{eventAdmins.map((item) => (
-										<option key={item.id} value={item.id}>
-											{item.fullName || item.email}
-										</option>
-									))}
-								</select>
-								<select
-									value={selectedEventUserId}
-									onChange={(event) => setSelectedEventUserId(event.target.value)}
-									required
-								>
-									<option value="">בחרו Event User</option>
-									{eventUsers.map((item) => (
-										<option key={item.id} value={item.id}>
-											{item.fullName || item.email}
-										</option>
-									))}
-								</select>
-								<button type="submit" className="submit-button" disabled={isLoading}>
-									{isLoading ? "מעדכן..." : "שייך משתמש"}
-								</button>
-							</form>
-
-							<div id="master-users" className="users-list">
-								<h3>משתמשים תחת Master Admin</h3>
-								{managedUsers.length === 0 && <p>אין משתמשים להצגה.</p>}
-								{managedUsers.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.fullName || item.email}</strong>
-											<div className="row-meta">
-												{item.email} | {roleLabel(item.role)}{" "}
-												{item.parentEventAdminEmail
-													? `| תחת ${item.parentEventAdminEmail}`
-													: ""}
-											</div>
-										</div>
-										{item.role === ROLE_EVENT_ADMIN && (
-											<button
-												type="button"
-												className="tab"
-												onClick={() => handleDemoteEventAdmin(item)}
-												disabled={isLoading}
-											>
-												הורד ל-Event User
-											</button>
-										)}
-									</div>
-								))}
-							</div>
-						</>
+						<MasterDashboard
+							isLoading={isLoading}
+							eventName={eventName}
+							setEventName={setEventName}
+							eventDate={eventDate}
+							setEventDate={setEventDate}
+							eventLocation={eventLocation}
+							setEventLocation={setEventLocation}
+							eventDescription={eventDescription}
+							setEventDescription={setEventDescription}
+							selectedEventOwnerAdminId={selectedEventOwnerAdminId}
+							setSelectedEventOwnerAdminId={setSelectedEventOwnerAdminId}
+							eventAdmins={eventAdmins}
+							handleSaveEvent={handleSaveEvent}
+							masterEvents={masterEvents}
+							promoteEmail={promoteEmail}
+							setPromoteEmail={setPromoteEmail}
+							handlePromoteToEventAdmin={handlePromoteToEventAdmin}
+							selectedEventAdminId={selectedEventAdminId}
+							setSelectedEventAdminId={setSelectedEventAdminId}
+							selectedEventUserId={selectedEventUserId}
+							setSelectedEventUserId={setSelectedEventUserId}
+							eventUsers={eventUsers}
+							handleAssignEventUser={handleAssignEventUser}
+							managedUsers={managedUsers}
+							roleLabel={roleLabel}
+							handleDemoteEventAdmin={handleDemoteEventAdmin}
+							ROLE_EVENT_ADMIN={ROLE_EVENT_ADMIN}
+						/>
 					)}
 
 					{userRole === ROLE_EVENT_ADMIN && (
-						<>
-							<div id="event-admin-events" className="users-list">
-								<h3>האירועים שהוקצו אליך</h3>
-								{eventAdminEvents.length === 0 && <p>עדיין לא הוקצו לך אירועים.</p>}
-								{eventAdminEvents.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.name}</strong>
-											<div className="row-meta">
-												{item.eventDate}
-												{item.location ? ` | ${item.location}` : ""}
-											</div>
-										</div>
-									</div>
-								))}
-							</div>
-
-							<div id="event-admin-assignments" className="users-list">
-								<h3>שיוך משתמשים לאירועים</h3>
-								<form className="promote-form" onSubmit={handleAssignUserToEvent}>
-									<select
-										value={selectedAssignmentEventId}
-										onChange={(event) => setSelectedAssignmentEventId(event.target.value)}
-										required
-									>
-										<option value="">בחרו אירוע</option>
-										{eventAdminEvents.map((item) => (
-											<option key={item.id} value={item.id}>
-												{item.name}
-											</option>
-										))}
-									</select>
-									<select
-										value={selectedAssignmentUserId}
-										onChange={(event) => setSelectedAssignmentUserId(event.target.value)}
-										required
-									>
-										<option value="">בחרו Event User</option>
-										{eventAdminUsers.map((item) => (
-											<option key={item.id} value={item.id}>
-												{item.fullName || item.email}
-											</option>
-										))}
-									</select>
-									<button type="submit" className="submit-button" disabled={isLoading}>
-										{isLoading ? "משייך..." : "שייך משתמש לאירוע"}
-									</button>
-								</form>
-
-								{eventAssignments.length === 0 && <p>עדיין אין שיוכים.</p>}
-								{eventAssignments.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.eventName}</strong>
-											<div className="row-meta">
-												{item.userFullName || item.userEmail}
-												{item.eventDate ? ` | ${item.eventDate}` : ""}
-											</div>
-										</div>
-										<button
-											type="button"
-											className="tab"
-											onClick={() => handleRemoveAssignment(item.id)}
-											disabled={isLoading}
-										>
-											הסר שיוך
-										</button>
-									</div>
-								))}
-							</div>
-
-							<div id="event-admin-preferences" className="users-list">
-								<h3>דשבורד העדפות</h3>
-								<p className="row-meta">סה״כ הגשות: {eventAdminPreferences.length}</p>
-								{Object.keys(prefsByEvent).length === 0 && <p>עדיין אין הגשות העדפות.</p>}
-								{Object.entries(prefsByEvent).map(([eventNameKey, count]) => (
-									<div key={eventNameKey} className="user-row">
-										<div>
-											<strong>{eventNameKey}</strong>
-											<div className="row-meta">{count} הגשות</div>
-										</div>
-									</div>
-								))}
-								{eventAdminPreferences.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.userFullName || item.userEmail}</strong>
-											<div className="row-meta">
-												{item.eventName} | מוזיקה: {(item.musicStyles || []).join(", ") || "-"}
-											</div>
-											<div className="row-meta">
-												משקאות: {(item.drinkPreferences || []).join(", ") || "-"}
-											</div>
-										</div>
-									</div>
-								))}
-							</div>
-
-							<div id="event-admin-users" className="users-list">
-								<h3>Event Users תחתייך</h3>
-								<p className="row-meta">
-									סה״כ משתמשים משויכים: {eventAdminUsers.length}
-								</p>
-								{eventAdminUsers.length === 0 && (
-									<p>עדיין לא שויכו אליך Event Users.</p>
-								)}
-								{eventAdminUsers.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.fullName || item.email}</strong>
-											<div className="row-meta">{item.email} | Event User</div>
-										</div>
-									</div>
-								))}
-							</div>
-						</>
+						<EventAdminDashboard
+							isLoading={isLoading}
+							eventAdminEvents={eventAdminEvents}
+							eventAdminUsers={eventAdminUsers}
+							selectedAssignmentEventId={selectedAssignmentEventId}
+							setSelectedAssignmentEventId={setSelectedAssignmentEventId}
+							selectedAssignmentUserId={selectedAssignmentUserId}
+							setSelectedAssignmentUserId={setSelectedAssignmentUserId}
+							handleAssignUserToEvent={handleAssignUserToEvent}
+							eventAssignments={eventAssignments}
+							handleRemoveAssignment={handleRemoveAssignment}
+							eventAdminPreferences={eventAdminPreferences}
+						/>
 					)}
 
 					{userRole === ROLE_EVENT_USER && (
-						<>
-							<div id="event-user-events" className="users-list">
-								<h3>האירועים שלי</h3>
-								{eventUserEvents.length === 0 && <p>עדיין לא שויכת לאירועים.</p>}
-								{eventUserEvents.map((item) => (
-									<div key={item.id} className="user-row">
-										<div>
-											<strong>{item.eventName}</strong>
-											<div className="row-meta">
-												{item.eventDate || "ללא תאריך"}
-												{item.eventLocation ? ` | ${item.eventLocation}` : ""}
-											</div>
-											{item.eventDescription && (
-												<div className="row-meta">{item.eventDescription}</div>
-											)}
-										</div>
-									</div>
-								))}
-							</div>
-
-							<div id="event-user-preferences" className="users-list">
-								<h3>העדפות לאירוע</h3>
-								<form className="promote-form" onSubmit={handleSavePreferences}>
-									<select
-										value={selectedPreferenceEventId}
-										onChange={(event) => setSelectedPreferenceEventId(event.target.value)}
-										required
-									>
-										<option value="">בחר אירוע</option>
-										{eventUserEvents.map((item) => (
-											<option key={item.id} value={item.eventId}>
-												{item.eventName}
-											</option>
-										))}
-									</select>
-									<input
-										type="text"
-										placeholder="סגנונות מוזיקה (מופרד בפסיקים)"
-										value={musicStylesInput}
-										onChange={(event) => setMusicStylesInput(event.target.value)}
-									/>
-									<input
-										type="text"
-										placeholder="שירים מוצעים (מופרד בפסיקים)"
-										value={songSuggestionsInput}
-										onChange={(event) => setSongSuggestionsInput(event.target.value)}
-									/>
-									<input
-										type="text"
-										placeholder="משקאות מועדפים (מופרד בפסיקים)"
-										value={drinkPreferencesInput}
-										onChange={(event) => setDrinkPreferencesInput(event.target.value)}
-									/>
-									<input
-										type="text"
-										placeholder="פידבק כללי (אופציונלי)"
-										value={feedbackInput}
-										onChange={(event) => setFeedbackInput(event.target.value)}
-									/>
-									<button type="submit" className="submit-button" disabled={isLoading}>
-										{isLoading ? "שומר..." : "שמור העדפות"}
-									</button>
-								</form>
-							</div>
-						</>
+						<EventUserDashboard
+							isLoading={isLoading}
+							eventUserEvents={eventUserEvents}
+							selectedPreferenceEventId={selectedPreferenceEventId}
+							setSelectedPreferenceEventId={setSelectedPreferenceEventId}
+							musicStylesInput={musicStylesInput}
+							setMusicStylesInput={setMusicStylesInput}
+							songSuggestionsInput={songSuggestionsInput}
+							setSongSuggestionsInput={setSongSuggestionsInput}
+							drinkPreferencesInput={drinkPreferencesInput}
+							setDrinkPreferencesInput={setDrinkPreferencesInput}
+							feedbackInput={feedbackInput}
+							setFeedbackInput={setFeedbackInput}
+							handleSavePreferences={handleSavePreferences}
+						/>
 					)}
 
 					<button
@@ -1318,100 +1043,25 @@ function App() {
 	}
 
 	return (
-		<main className="page">
-			<section className="card" dir="rtl">
-				<p className="badge">Momento</p>
-				<h1>{title}</h1>
-				<p className="subtitle">
-					{isRegisterMode ? "יצירת חשבון מארגן חדש" : "התחברות לחשבון"}
-				</p>
-
-				<div className="switcher">
-					<button
-						type="button"
-						className={!isRegisterMode ? "tab active" : "tab"}
-						onClick={() => {
-							setMode("login");
-							clearStatus();
-						}}
-						disabled={isLoading}
-					>
-						התחברות
-					</button>
-					<button
-						type="button"
-						className={isRegisterMode ? "tab active" : "tab"}
-						onClick={() => {
-							setMode("register");
-							clearStatus();
-						}}
-						disabled={isLoading}
-					>
-						הרשמה
-					</button>
-				</div>
-
-				<form onSubmit={onSubmit} className="login-form">
-					{isRegisterMode && (
-						<>
-							<label htmlFor="name">שם מלא</label>
-							<input
-								id="name"
-								type="text"
-								placeholder="השם שלך"
-								value={name}
-								onChange={(event) => setName(event.target.value)}
-								required
-								autoFocus
-							/>
-						</>
-					)}
-
-					<label htmlFor="email">אימייל</label>
-					<input
-						id="email"
-						type="email"
-						placeholder="name@example.com"
-						value={email}
-						onChange={(event) => setEmail(event.target.value)}
-						required
-						autoFocus={!isRegisterMode}
-					/>
-
-					<label htmlFor="password">סיסמה</label>
-					<input
-						id="password"
-						type="password"
-						placeholder="********"
-						value={password}
-						onChange={(event) => setPassword(event.target.value)}
-						required
-					/>
-
-					{isRegisterMode && (
-						<>
-							<label htmlFor="confirmPassword">אימות סיסמה</label>
-							<input
-								id="confirmPassword"
-								type="password"
-								placeholder="********"
-								value={confirmPassword}
-								onChange={(event) => setConfirmPassword(event.target.value)}
-								required
-							/>
-						</>
-					)}
-
-					<button type="submit" className="submit-button" disabled={isLoading}>
-						{isLoading ? "טוען..." : isRegisterMode ? "יצירת חשבון" : "התחברות"}
-					</button>
-				</form>
-
-				{firebaseSetupError && <p className="warning">{firebaseSetupError}</p>}
-				{error && <p className="error">{error}</p>}
-				{success && <p className="success">{success}</p>}
-			</section>
-		</main>
+		<AuthPage
+			isRegisterMode={isRegisterMode}
+			title={title}
+			isLoading={isLoading}
+			name={name}
+			setName={setName}
+			email={email}
+			setEmail={setEmail}
+			password={password}
+			setPassword={setPassword}
+			confirmPassword={confirmPassword}
+			setConfirmPassword={setConfirmPassword}
+			setMode={setMode}
+			clearStatus={clearStatus}
+			onSubmit={onSubmit}
+			firebaseSetupError={firebaseSetupError}
+			error={error}
+			success={success}
+		/>
 	);
 }
 
