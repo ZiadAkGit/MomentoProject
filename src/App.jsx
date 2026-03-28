@@ -1,24 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-	createUserWithEmailAndPassword,
-	onAuthStateChanged,
-	signInWithEmailAndPassword,
-	updateProfile,
-	signOut,
-} from "firebase/auth";
-import {
-	collection,
-	deleteDoc,
-	doc,
-	getDoc,
-	getDocs,
-	limit,
-	query,
-	serverTimestamp,
-	setDoc,
-	where,
-} from "firebase/firestore";
-import { auth, db, firebaseSetupError } from "./firebase";
 import "./App.css";
 import DashboardNav from "./components/DashboardNav";
 import AuthPage from "./pages/AuthPage";
