@@ -40,6 +40,24 @@ const MASTER_ADMIN_EMAILS = new Set(["ziadak14@gmail.com", "nournim98@gmail.com"
 const ROLE_MASTER_ADMIN = "master_admin";
 const ROLE_EVENT_ADMIN = "event_admin";
 const ROLE_EVENT_USER = "event_user";
+const DASHBOARD_LINKS_BY_ROLE = {
+	[ROLE_MASTER_ADMIN]: [
+		{ id: "master-events", label: "אירועים" },
+		{ id: "master-admins", label: "מינוי אדמינים" },
+		{ id: "master-assign", label: "שיוך משתמשים" },
+		{ id: "master-users", label: "כל המשתמשים" },
+	],
+	[ROLE_EVENT_ADMIN]: [
+		{ id: "event-admin-events", label: "אירועים שהוקצו" },
+		{ id: "event-admin-assignments", label: "שיוך לאירועים" },
+		{ id: "event-admin-preferences", label: "דשבורד העדפות" },
+		{ id: "event-admin-users", label: "המשתמשים שלי" },
+	],
+	[ROLE_EVENT_USER]: [
+		{ id: "event-user-events", label: "האירועים שלי" },
+		{ id: "event-user-preferences", label: "העדפות שלי" },
+	],
+};
 
 function appError(code, message) {
 	const error = new Error(message);
@@ -56,6 +74,7 @@ function getErrorMessage(error) {
 }
 
 function App() {
+	// Auth form state
 	const [mode, setMode] = useState("login");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
@@ -65,10 +84,14 @@ function App() {
 	const [success, setSuccess] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [isAuthReady, setIsAuthReady] = useState(false);
+
+	// Session and role state
 	const [userRole, setUserRole] = useState(null);
 	const [displayName, setDisplayName] = useState("");
 	const [currentUser, setCurrentUser] = useState(null);
 	const [promoteEmail, setPromoteEmail] = useState("");
+
+	// Dashboard data state
 	const [managedUsers, setManagedUsers] = useState([]);
 	const [eventAdminUsers, setEventAdminUsers] = useState([]);
 	const [masterEvents, setMasterEvents] = useState([]);
@@ -116,6 +139,8 @@ function App() {
 		if (role === ROLE_EVENT_ADMIN) return "Event Admin";
 		return "Event User";
 	};
+	const isAdminRole = (role) => role === ROLE_MASTER_ADMIN || role === ROLE_EVENT_ADMIN;
+	const getDashboardLinks = (role) => DASHBOARD_LINKS_BY_ROLE[role] || [];
 
 	const ensureConfigured = () => {
 		if (!auth || !db) {
@@ -333,6 +358,50 @@ function App() {
 		setEventUserPreferences(items);
 	};
 
+	const getSessionDisplayName = (profile, user) =>
+		profile.fullName || user.displayName || user.email || "User";
+
+	const buildSessionContext = (user, role) => ({
+		uid: user.uid,
+		email: normalizeEmail(user.email ?? ""),
+		role,
+	});
+
+	const loadRoleData = async (role, context) => {
+		if (role === ROLE_MASTER_ADMIN) {
+			await loadMasterUsers(context);
+			await loadMasterEvents(context);
+			setEventAdminUsers([]);
+			setEventAdminEvents([]);
+			setEventAssignments([]);
+			setEventAdminPreferences([]);
+			setEventUserEvents([]);
+			setEventUserPreferences([]);
+			return;
+		}
+
+		if (role === ROLE_EVENT_ADMIN) {
+			await loadEventAdminUsers(context);
+			await loadEventAdminEvents(context);
+			await loadEventAdminAssignments(context);
+			await loadEventAdminPreferences(context);
+			setManagedUsers([]);
+			setMasterEvents([]);
+			setEventUserEvents([]);
+			setEventUserPreferences([]);
+			return;
+		}
+
+		setManagedUsers([]);
+		setMasterEvents([]);
+		setEventAdminUsers([]);
+		setEventAdminEvents([]);
+		setEventAssignments([]);
+		setEventAdminPreferences([]);
+		await loadEventUserEvents(context);
+		await loadEventUserPreferences(context);
+	};
+
 	const handleRegister = async () => {
 		if (password !== confirmPassword) {
 			throw appError("app/password-mismatch", "הסיסמאות לא תואמות.");
@@ -368,80 +437,16 @@ function App() {
 			? userSnapshot.data()
 			: { role: ROLE_EVENT_USER };
 		const role = resolveRole(profile, user.email);
-		const isAdmin = role === ROLE_MASTER_ADMIN || role === ROLE_EVENT_ADMIN;
+		const sessionContext = buildSessionContext(user, role);
+		const isAdmin = isAdminRole(role);
 
-		setDisplayName(
-			profile.fullName || user.displayName || user.email || "User",
-		);
-		setCurrentUser({
-			uid: user.uid,
-			email: normalizeEmail(user.email ?? ""),
-			role,
-		});
+		setDisplayName(getSessionDisplayName(profile, user));
+		setCurrentUser(sessionContext);
 		setUserRole(role);
 		setSuccess(isAdmin ? "התחברת כאדמין." : "התחברת בהצלחה.");
 		resetForm();
 
-		if (role === ROLE_MASTER_ADMIN) {
-			await loadMasterUsers({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			await loadMasterEvents({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			setEventAdminUsers([]);
-			setEventAdminEvents([]);
-			setEventAssignments([]);
-			setEventAdminPreferences([]);
-			setEventUserEvents([]);
-			setEventUserPreferences([]);
-		} else if (role === ROLE_EVENT_ADMIN) {
-			await loadEventAdminUsers({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			await loadEventAdminEvents({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			await loadEventAdminAssignments({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			await loadEventAdminPreferences({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			setManagedUsers([]);
-			setMasterEvents([]);
-			setEventUserEvents([]);
-			setEventUserPreferences([]);
-		} else {
-			setManagedUsers([]);
-			setMasterEvents([]);
-			setEventAdminUsers([]);
-			setEventAdminEvents([]);
-			setEventAssignments([]);
-			setEventAdminPreferences([]);
-			await loadEventUserEvents({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-			await loadEventUserPreferences({
-				uid: user.uid,
-				email: normalizeEmail(user.email ?? ""),
-				role,
-			});
-		}
+		await loadRoleData(role, sessionContext);
 	};
 
 	const handleLogin = async () => {
@@ -926,28 +931,10 @@ function App() {
 	}
 
 	if (userRole) {
-		const isAdmin = userRole === ROLE_MASTER_ADMIN || userRole === ROLE_EVENT_ADMIN;
+		const isAdmin = isAdminRole(userRole);
 		const eventAdmins = managedUsers.filter((item) => item.role === ROLE_EVENT_ADMIN);
 		const eventUsers = managedUsers.filter((item) => item.role === ROLE_EVENT_USER);
-		const dashboardLinks =
-			userRole === ROLE_MASTER_ADMIN
-				? [
-						{ id: "master-events", label: "אירועים" },
-						{ id: "master-admins", label: "מינוי אדמינים" },
-						{ id: "master-assign", label: "שיוך משתמשים" },
-						{ id: "master-users", label: "כל המשתמשים" },
-					]
-				: userRole === ROLE_EVENT_ADMIN
-					? [
-							{ id: "event-admin-events", label: "אירועים שהוקצו" },
-							{ id: "event-admin-assignments", label: "שיוך לאירועים" },
-							{ id: "event-admin-preferences", label: "דשבורד העדפות" },
-							{ id: "event-admin-users", label: "המשתמשים שלי" },
-						]
-					: [
-							{ id: "event-user-events", label: "האירועים שלי" },
-							{ id: "event-user-preferences", label: "העדפות שלי" },
-						];
+		const dashboardLinks = getDashboardLinks(userRole);
 		return (
 			<main className="page">
 				<section className="card dashboard" dir="rtl">
