@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	createUserWithEmailAndPassword,
+	onAuthStateChanged,
 	signInWithEmailAndPassword,
 	updateProfile,
 	signOut,
@@ -58,6 +59,7 @@ function App() {
 	const [error, setError] = useState("");
 	const [success, setSuccess] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
+	const [isAuthReady, setIsAuthReady] = useState(false);
 	const [userRole, setUserRole] = useState(null);
 	const [displayName, setDisplayName] = useState("");
 	const [currentUser, setCurrentUser] = useState(null);
@@ -67,7 +69,9 @@ function App() {
 	const [masterEvents, setMasterEvents] = useState([]);
 	const [eventAdminEvents, setEventAdminEvents] = useState([]);
 	const [eventAssignments, setEventAssignments] = useState([]);
+	const [eventAdminPreferences, setEventAdminPreferences] = useState([]);
 	const [eventUserEvents, setEventUserEvents] = useState([]);
+	const [eventUserPreferences, setEventUserPreferences] = useState([]);
 	const [eventName, setEventName] = useState("");
 	const [eventDate, setEventDate] = useState("");
 	const [eventLocation, setEventLocation] = useState("");
@@ -75,6 +79,11 @@ function App() {
 	const [selectedEventOwnerAdminId, setSelectedEventOwnerAdminId] = useState("");
 	const [selectedAssignmentEventId, setSelectedAssignmentEventId] = useState("");
 	const [selectedAssignmentUserId, setSelectedAssignmentUserId] = useState("");
+	const [selectedPreferenceEventId, setSelectedPreferenceEventId] = useState("");
+	const [musicStylesInput, setMusicStylesInput] = useState("");
+	const [songSuggestionsInput, setSongSuggestionsInput] = useState("");
+	const [drinkPreferencesInput, setDrinkPreferencesInput] = useState("");
+	const [feedbackInput, setFeedbackInput] = useState("");
 	const [selectedEventAdminId, setSelectedEventAdminId] = useState("");
 	const [selectedEventUserId, setSelectedEventUserId] = useState("");
 
@@ -290,6 +299,35 @@ function App() {
 		setEventUserEvents(assignedEvents);
 	};
 
+	const loadEventAdminPreferences = async (eventAdminContext = currentUser) => {
+		if (!eventAdminContext || eventAdminContext.role !== ROLE_EVENT_ADMIN) {
+			return;
+		}
+
+		const prefsRef = collection(db, "guestPreferences");
+		const q = query(
+			prefsRef,
+			where("ownerEventAdminId", "==", eventAdminContext.uid),
+		);
+		const snapshot = await getDocs(q);
+
+		const items = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+		setEventAdminPreferences(items);
+	};
+
+	const loadEventUserPreferences = async (userContext = currentUser) => {
+		if (!userContext || userContext.role !== ROLE_EVENT_USER) {
+			return;
+		}
+
+		const prefsRef = collection(db, "guestPreferences");
+		const q = query(prefsRef, where("userId", "==", userContext.uid));
+		const snapshot = await getDocs(q);
+
+		const items = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+		setEventUserPreferences(items);
+	};
+
 	const handleRegister = async () => {
 		if (password !== confirmPassword) {
 			throw appError("app/password-mismatch", "הסיסמאות לא תואמות.");
@@ -313,14 +351,7 @@ function App() {
 		setConfirmPassword("");
 	};
 
-	const handleLogin = async () => {
-		const credential = await signInWithEmailAndPassword(
-			auth,
-			email.trim(),
-			password,
-		);
-		const user = credential.user;
-
+	const hydrateSessionFromUser = async (user) => {
 		const userRef = doc(db, "users", user.uid);
 		const userSnapshot = await getDoc(userRef);
 
@@ -360,7 +391,9 @@ function App() {
 			setEventAdminUsers([]);
 			setEventAdminEvents([]);
 			setEventAssignments([]);
+			setEventAdminPreferences([]);
 			setEventUserEvents([]);
+			setEventUserPreferences([]);
 		} else if (role === ROLE_EVENT_ADMIN) {
 			await loadEventAdminUsers({
 				uid: user.uid,
@@ -377,21 +410,42 @@ function App() {
 				email: normalizeEmail(user.email ?? ""),
 				role,
 			});
+			await loadEventAdminPreferences({
+				uid: user.uid,
+				email: normalizeEmail(user.email ?? ""),
+				role,
+			});
 			setManagedUsers([]);
 			setMasterEvents([]);
 			setEventUserEvents([]);
+			setEventUserPreferences([]);
 		} else {
 			setManagedUsers([]);
 			setMasterEvents([]);
 			setEventAdminUsers([]);
 			setEventAdminEvents([]);
 			setEventAssignments([]);
+			setEventAdminPreferences([]);
 			await loadEventUserEvents({
 				uid: user.uid,
 				email: normalizeEmail(user.email ?? ""),
 				role,
 			});
+			await loadEventUserPreferences({
+				uid: user.uid,
+				email: normalizeEmail(user.email ?? ""),
+				role,
+			});
 		}
+	};
+
+	const handleLogin = async () => {
+		const credential = await signInWithEmailAndPassword(
+			auth,
+			email.trim(),
+			password,
+		);
+		await hydrateSessionFromUser(credential.user);
 	};
 
 	const clearEventForm = () => {
@@ -400,6 +454,41 @@ function App() {
 		setEventLocation("");
 		setEventDescription("");
 		setSelectedEventOwnerAdminId("");
+	};
+
+	const clearPreferenceForm = () => {
+		setSelectedPreferenceEventId("");
+		setMusicStylesInput("");
+		setSongSuggestionsInput("");
+		setDrinkPreferencesInput("");
+		setFeedbackInput("");
+	};
+
+	const parseCsv = (value) =>
+		value
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean);
+
+	const clearAuthState = () => {
+		setUserRole(null);
+		setDisplayName("");
+		setCurrentUser(null);
+		setManagedUsers([]);
+		setMasterEvents([]);
+		setEventAdminUsers([]);
+		setEventAdminEvents([]);
+		setEventAssignments([]);
+		setEventAdminPreferences([]);
+		setEventUserEvents([]);
+		setEventUserPreferences([]);
+		setPromoteEmail("");
+		setSelectedAssignmentEventId("");
+		setSelectedAssignmentUserId("");
+		setSelectedEventAdminId("");
+		setSelectedEventUserId("");
+		clearEventForm();
+		clearPreferenceForm();
 	};
 
 	const handlePromoteToEventAdmin = async (event) => {
@@ -672,30 +761,125 @@ function App() {
 		}
 	};
 
+	const handleSavePreferences = async (event) => {
+		event.preventDefault();
+		if (!currentUser || currentUser.role !== ROLE_EVENT_USER) {
+			setError("רק Event User יכול לשמור העדפות.");
+			return;
+		}
+
+		if (!selectedPreferenceEventId) {
+			setError("בחר אירוע להגשת העדפות.");
+			return;
+		}
+
+		const targetEvent = eventUserEvents.find((item) => item.eventId === selectedPreferenceEventId);
+		if (!targetEvent) {
+			setError("האירוע שנבחר לא נמצא.");
+			return;
+		}
+
+		setError("");
+		setSuccess("");
+		setIsLoading(true);
+
+		try {
+			const prefDocId = `${selectedPreferenceEventId}_${currentUser.uid}`;
+			const musicStyles = parseCsv(musicStylesInput);
+			const songSuggestions = parseCsv(songSuggestionsInput);
+			const drinkPreferences = parseCsv(drinkPreferencesInput);
+
+			await setDoc(
+				doc(db, "guestPreferences", prefDocId),
+				{
+					eventId: targetEvent.eventId,
+					eventName: targetEvent.eventName,
+					eventDate: targetEvent.eventDate || null,
+					userId: currentUser.uid,
+					userEmail: currentUser.email,
+					userFullName: displayName || null,
+					ownerEventAdminId: targetEvent.ownerEventAdminId,
+					ownerEventAdminEmail: targetEvent.ownerEventAdminEmail || null,
+					musicStyles,
+					songSuggestions,
+					drinkPreferences,
+					feedback: feedbackInput.trim() || null,
+					updatedAt: serverTimestamp(),
+					createdAt: serverTimestamp(),
+				},
+				{ merge: true },
+			);
+
+			setSuccess("ההעדפות נשמרו בהצלחה.");
+			await loadEventUserPreferences();
+		} catch (savePrefError) {
+			setError(savePrefError.message || DEFAULT_ERROR_MESSAGE);
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		if (!selectedPreferenceEventId) {
+			return;
+		}
+
+		const existing = eventUserPreferences.find(
+			(item) => item.eventId === selectedPreferenceEventId,
+		);
+		if (!existing) {
+			setMusicStylesInput("");
+			setSongSuggestionsInput("");
+			setDrinkPreferencesInput("");
+			setFeedbackInput("");
+			return;
+		}
+
+		setMusicStylesInput((existing.musicStyles || []).join(", "));
+		setSongSuggestionsInput((existing.songSuggestions || []).join(", "));
+		setDrinkPreferencesInput((existing.drinkPreferences || []).join(", "));
+		setFeedbackInput(existing.feedback || "");
+	}, [selectedPreferenceEventId, eventUserPreferences]);
+
 	const handleLogout = async () => {
 		if (!auth) {
 			return;
 		}
 
 		await signOut(auth);
-		setUserRole(null);
-		setDisplayName("");
-		setCurrentUser(null);
-		setManagedUsers([]);
-		setMasterEvents([]);
-		setEventAdminUsers([]);
-		setEventAdminEvents([]);
-		setEventAssignments([]);
-		setEventUserEvents([]);
-		setPromoteEmail("");
-		setSelectedAssignmentEventId("");
-		setSelectedAssignmentUserId("");
-		setSelectedEventAdminId("");
-		setSelectedEventUserId("");
-		clearEventForm();
+		clearAuthState();
+		setMode("login");
 		setSuccess("");
 		setError("");
 	};
+
+	/* eslint-disable react-hooks/exhaustive-deps */
+	// Session persistence: subscribe once and restore the active session.
+	useEffect(() => {
+		if (!auth || !db) {
+			setIsAuthReady(true);
+			return;
+		}
+
+		const unsubscribe = onAuthStateChanged(auth, async (user) => {
+			try {
+				if (!user) {
+					clearAuthState();
+					setIsAuthReady(true);
+					return;
+				}
+
+				await hydrateSessionFromUser(user);
+				setIsAuthReady(true);
+			} catch (sessionError) {
+				setError(sessionError.message || DEFAULT_ERROR_MESSAGE);
+				setIsAuthReady(true);
+			}
+		});
+
+		return () => unsubscribe();
+	}, [auth, db]);
+	/* eslint-enable react-hooks/exhaustive-deps */
 
 	const onSubmit = async (event) => {
 		event.preventDefault();
@@ -724,10 +908,46 @@ function App() {
 		}
 	};
 
+	if (!isAuthReady) {
+		return (
+			<main className="page">
+				<section className="card" dir="rtl">
+					<p className="badge">Momento</p>
+					<h1>טוען...</h1>
+					<p className="subtitle">בודקים את מצב ההתחברות שלך</p>
+				</section>
+			</main>
+		);
+	}
+
 	if (userRole) {
 		const isAdmin = userRole === ROLE_MASTER_ADMIN || userRole === ROLE_EVENT_ADMIN;
 		const eventAdmins = managedUsers.filter((item) => item.role === ROLE_EVENT_ADMIN);
 		const eventUsers = managedUsers.filter((item) => item.role === ROLE_EVENT_USER);
+		const prefsByEvent = eventAdminPreferences.reduce((acc, item) => {
+			const key = item.eventName || "ללא שם אירוע";
+			acc[key] = (acc[key] || 0) + 1;
+			return acc;
+		}, {});
+		const dashboardLinks =
+			userRole === ROLE_MASTER_ADMIN
+				? [
+						{ id: "master-events", label: "אירועים" },
+						{ id: "master-admins", label: "מינוי אדמינים" },
+						{ id: "master-assign", label: "שיוך משתמשים" },
+						{ id: "master-users", label: "כל המשתמשים" },
+					]
+				: userRole === ROLE_EVENT_ADMIN
+					? [
+							{ id: "event-admin-events", label: "אירועים שהוקצו" },
+							{ id: "event-admin-assignments", label: "שיוך לאירועים" },
+							{ id: "event-admin-preferences", label: "דשבורד העדפות" },
+							{ id: "event-admin-users", label: "המשתמשים שלי" },
+						]
+					: [
+							{ id: "event-user-events", label: "האירועים שלי" },
+							{ id: "event-user-preferences", label: "העדפות שלי" },
+						];
 		return (
 			<main className="page">
 				<section className="card dashboard" dir="rtl">
@@ -742,9 +962,17 @@ function App() {
 							: "התחברת כמשתמש רגיל ללא הרשאות מנהל."}
 					</p>
 
+					<nav className="dashboard-nav" aria-label="Dashboard sections">
+						{dashboardLinks.map((item) => (
+							<a key={item.id} className="nav-chip" href={`#${item.id}`}>
+								{item.label}
+							</a>
+						))}
+					</nav>
+
 					{userRole === ROLE_MASTER_ADMIN && (
 						<>
-							<div className="users-list">
+							<div id="master-events" className="users-list">
 								<h3>יצירת אירוע ושיוך ל-Event Admin</h3>
 								<form className="promote-form" onSubmit={handleSaveEvent}>
 									<input
@@ -805,7 +1033,11 @@ function App() {
 								))}
 							</div>
 
-							<form className="promote-form" onSubmit={handlePromoteToEventAdmin}>
+							<form
+								id="master-admins"
+								className="promote-form"
+								onSubmit={handlePromoteToEventAdmin}
+							>
 								<label htmlFor="promoteEmail">מינוי Event Admin (לפי אימייל)</label>
 								<input
 									id="promoteEmail"
@@ -820,7 +1052,11 @@ function App() {
 								</button>
 							</form>
 
-							<form className="promote-form" onSubmit={handleAssignEventUser}>
+							<form
+								id="master-assign"
+								className="promote-form"
+								onSubmit={handleAssignEventUser}
+							>
 								<label htmlFor="eventAdminSelect">שיוך Event User ל-Event Admin</label>
 								<select
 									id="eventAdminSelect"
@@ -852,7 +1088,7 @@ function App() {
 								</button>
 							</form>
 
-							<div className="users-list">
+							<div id="master-users" className="users-list">
 								<h3>משתמשים תחת Master Admin</h3>
 								{managedUsers.length === 0 && <p>אין משתמשים להצגה.</p>}
 								{managedUsers.map((item) => (
@@ -884,7 +1120,7 @@ function App() {
 
 					{userRole === ROLE_EVENT_ADMIN && (
 						<>
-							<div className="users-list">
+							<div id="event-admin-events" className="users-list">
 								<h3>האירועים שהוקצו אליך</h3>
 								{eventAdminEvents.length === 0 && <p>עדיין לא הוקצו לך אירועים.</p>}
 								{eventAdminEvents.map((item) => (
@@ -900,7 +1136,7 @@ function App() {
 								))}
 							</div>
 
-							<div className="users-list">
+							<div id="event-admin-assignments" className="users-list">
 								<h3>שיוך משתמשים לאירועים</h3>
 								<form className="promote-form" onSubmit={handleAssignUserToEvent}>
 									<select
@@ -954,7 +1190,34 @@ function App() {
 								))}
 							</div>
 
-							<div className="users-list">
+							<div id="event-admin-preferences" className="users-list">
+								<h3>דשבורד העדפות</h3>
+								<p className="row-meta">סה״כ הגשות: {eventAdminPreferences.length}</p>
+								{Object.keys(prefsByEvent).length === 0 && <p>עדיין אין הגשות העדפות.</p>}
+								{Object.entries(prefsByEvent).map(([eventNameKey, count]) => (
+									<div key={eventNameKey} className="user-row">
+										<div>
+											<strong>{eventNameKey}</strong>
+											<div className="row-meta">{count} הגשות</div>
+										</div>
+									</div>
+								))}
+								{eventAdminPreferences.map((item) => (
+									<div key={item.id} className="user-row">
+										<div>
+											<strong>{item.userFullName || item.userEmail}</strong>
+											<div className="row-meta">
+												{item.eventName} | מוזיקה: {(item.musicStyles || []).join(", ") || "-"}
+											</div>
+											<div className="row-meta">
+												משקאות: {(item.drinkPreferences || []).join(", ") || "-"}
+											</div>
+										</div>
+									</div>
+								))}
+							</div>
+
+							<div id="event-admin-users" className="users-list">
 								<h3>Event Users תחתייך</h3>
 								<p className="row-meta">
 									סה״כ משתמשים משויכים: {eventAdminUsers.length}
@@ -975,24 +1238,71 @@ function App() {
 					)}
 
 					{userRole === ROLE_EVENT_USER && (
-						<div className="users-list">
-							<h3>האירועים שלי</h3>
-							{eventUserEvents.length === 0 && <p>עדיין לא שויכת לאירועים.</p>}
-							{eventUserEvents.map((item) => (
-								<div key={item.id} className="user-row">
-									<div>
-										<strong>{item.eventName}</strong>
-										<div className="row-meta">
-											{item.eventDate || "ללא תאריך"}
-											{item.eventLocation ? ` | ${item.eventLocation}` : ""}
+						<>
+							<div id="event-user-events" className="users-list">
+								<h3>האירועים שלי</h3>
+								{eventUserEvents.length === 0 && <p>עדיין לא שויכת לאירועים.</p>}
+								{eventUserEvents.map((item) => (
+									<div key={item.id} className="user-row">
+										<div>
+											<strong>{item.eventName}</strong>
+											<div className="row-meta">
+												{item.eventDate || "ללא תאריך"}
+												{item.eventLocation ? ` | ${item.eventLocation}` : ""}
+											</div>
+											{item.eventDescription && (
+												<div className="row-meta">{item.eventDescription}</div>
+											)}
 										</div>
-										{item.eventDescription && (
-											<div className="row-meta">{item.eventDescription}</div>
-										)}
 									</div>
-								</div>
-							))}
-						</div>
+								))}
+							</div>
+
+							<div id="event-user-preferences" className="users-list">
+								<h3>העדפות לאירוע</h3>
+								<form className="promote-form" onSubmit={handleSavePreferences}>
+									<select
+										value={selectedPreferenceEventId}
+										onChange={(event) => setSelectedPreferenceEventId(event.target.value)}
+										required
+									>
+										<option value="">בחר אירוע</option>
+										{eventUserEvents.map((item) => (
+											<option key={item.id} value={item.eventId}>
+												{item.eventName}
+											</option>
+										))}
+									</select>
+									<input
+										type="text"
+										placeholder="סגנונות מוזיקה (מופרד בפסיקים)"
+										value={musicStylesInput}
+										onChange={(event) => setMusicStylesInput(event.target.value)}
+									/>
+									<input
+										type="text"
+										placeholder="שירים מוצעים (מופרד בפסיקים)"
+										value={songSuggestionsInput}
+										onChange={(event) => setSongSuggestionsInput(event.target.value)}
+									/>
+									<input
+										type="text"
+										placeholder="משקאות מועדפים (מופרד בפסיקים)"
+										value={drinkPreferencesInput}
+										onChange={(event) => setDrinkPreferencesInput(event.target.value)}
+									/>
+									<input
+										type="text"
+										placeholder="פידבק כללי (אופציונלי)"
+										value={feedbackInput}
+										onChange={(event) => setFeedbackInput(event.target.value)}
+									/>
+									<button type="submit" className="submit-button" disabled={isLoading}>
+										{isLoading ? "שומר..." : "שמור העדפות"}
+									</button>
+								</form>
+							</div>
+						</>
 					)}
 
 					<button
